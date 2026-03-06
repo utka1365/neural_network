@@ -32,7 +32,6 @@ pub fn mnist_output(path: String) -> Result<Vec<Vec<f64>>, std::io::Error>{
 
     file.read_to_end(&mut buffer)?;
 
-    // I have 8 extra labels in my file
     for i in 8..buffer.len(){
         outputs.push(vec![0.0; 10]);
         outputs[i-8][buffer[i] as usize] = 1.0;
