@@ -6,7 +6,7 @@ use std::{
 };
 use rand::random_range;
 
-const LEARNING_RATE: f64 = 0.001;
+const LEARNING_RATE: f64 = 0.00001;
 const THREAD_COUNT: i32 = 10;
 const RELU_KOEFF: f64 = 0.001;
 
@@ -82,24 +82,24 @@ impl Network{
         }
 
         let mut layers: Vec<Vec<f64>> = Vec::new();
+        let mut weights: Vec<Vec<Vec<f64>>> = Vec::new();
+
         for i in 0..cnt_layers as usize{
             // push new layer of neurons
             layers.push(vec![0.0; cnt_neurons[i] as usize]);
-            // append a bias into layer
-            layers[i].insert(0, 1.0);
         }
 
-        let mut weights: Vec<Vec<Vec<f64>>> = Vec::new();
-
-        // neurons of first layer don't have input edges
+        // cnt_layers - 1, because neurons of first layer don't have input edges
         for i in 0..(cnt_layers - 1) as usize{
             weights.push(Vec::new());
 
             for _ in 0..cnt_neurons[i+1] as usize{
                 // fill weights for every neuron with random numbers
                 let mut curr_neuron: Vec<f64> = Vec::new();
+                // append a bias into layer
+                curr_neuron.push(0.0);
                 for _ in 0..cnt_neurons[i] as usize{
-                    curr_neuron.push(random_range(0.0..2.0));
+                    curr_neuron.push(random_range(-2.0..2.0));
                 }
 
                 weights[i].push(curr_neuron);
@@ -114,8 +114,8 @@ impl Network{
 
     fn validate_dataset(&self, data: &DataSet) -> bool{
         // dataset inputs and outputs must have correct length
-        if self.layers[0].len() - 1 != data.inputs[0].len() ||
-            self.layers[self.layers.len() - 1].len() - 1 != data.outputs[0].len(){
+        if self.layers[0].len() != data.inputs[0].len() ||
+            self.layers[self.layers.len() - 1].len() != data.outputs[0].len(){
             return false;
         }
 
@@ -124,25 +124,22 @@ impl Network{
 
     fn step_forward(&mut self, input: &Vec<f64>){
         // initialize input layer of network
-        for i in 1..self.layers[0].len() {
-            self.layers[0][i] = input[i-1];
+        for i in 0..self.layers[0].len() {
+            self.layers[0][i] = input[i];
         }
 
         // for every neuron
         for layer in 1..self.layers.len(){
-            for neuron in 1..self.layers[layer].len(){
-                let mut sum = 0.0;
+            for neuron in 0..self.layers[layer].len(){
+                let mut sum = self.weights[layer-1][neuron][0];
 
                 // calculate sum of inputs for current neuron
-                for prev_neuron in 1..self.layers[layer-1].len(){
+                for prev_neuron in 0..self.layers[layer-1].len(){
                     sum += self.layers[layer-1][prev_neuron] *
-                        self.weights[layer-1][neuron-1][prev_neuron-1];
-                }
-                if layer == 1 && neuron == 1{
-                    //println!("{}", sum);
+                        self.weights[layer-1][neuron][prev_neuron+1];
                 }
                 // calculate sigmoid function
-                self.layers[layer][neuron] = ReLu(sum);
+                self.layers[layer][neuron] = sigmoid(sum / 784.0);
             }
         }
     }
@@ -150,48 +147,45 @@ impl Network{
     fn step_backward(&mut self, output: &Vec<f64>){
         let cnt_layers = self.layers.len();
 
-        // backpropagation for the output layer.
-        // from second neuron, because first neuron is bias.
-        for neuron in 1..self.layers[cnt_layers-1].len(){
+        // backpropagation for the output layer
+        for neuron in 0..self.layers[cnt_layers-1].len(){
             let activate_value = self.layers[cnt_layers-1][neuron];
-            let diff = ReLu_diff(activate_value);
-            let error =
-                self.layers[cnt_layers-1][neuron] - output[neuron-1];
-
+            let diff = activate_value * (1.0 - activate_value);
+            let error = self.layers[cnt_layers-1][neuron] - output[neuron];
             // changing the bias
-            self.layers[cnt_layers-2][0] += LEARNING_RATE * error * diff;
+            self.weights[cnt_layers-2][neuron][0] += LEARNING_RATE * error * diff;
 
             // changing the weights of other edges
-            for edge in 0..self.weights[cnt_layers-2][neuron-1].len(){
-                self.weights[cnt_layers-2][neuron-1][edge] -= LEARNING_RATE *
-                    error * activate_value * diff * self.layers[cnt_layers-2][edge+1];
+            for edge in 1..self.weights[cnt_layers-2][neuron].len(){
+                self.weights[cnt_layers-2][neuron][edge] -= LEARNING_RATE *
+                    error * activate_value * diff * self.layers[cnt_layers-2][edge-1];
             }
         }
 
         // backpropagation for other layers
         for layer in (1..(cnt_layers - 1)).rev(){
-            for neuron in 1..self.layers[layer].len(){
+            for neuron in 0..self.layers[layer].len(){
                 let activate_value = self.layers[layer][neuron];
-                let diff = ReLu_diff(activate_value);
-
+                let diff = activate_value * (1.0 - activate_value);
                 let mut error = 0.0;
-                for next_neuron in 1..self.layers[layer+1].len(){
+
+                for next_neuron in 0..self.layers[layer+1].len(){
                     let next_neuron_value = self.layers[layer+1][next_neuron];
-                    error += next_neuron_value * ReLu_diff(next_neuron_value) *
-                        self.weights[layer][next_neuron-1][neuron-1];
+                    error += next_neuron_value * next_neuron_value * (1.0 - next_neuron_value) *
+                        self.weights[layer][next_neuron][neuron+1];
                 }
 
-                self.layers[layer-1][0] -= LEARNING_RATE * error * activate_value * diff;
+                self.weights[layer-1][neuron][0] += LEARNING_RATE * error * diff;
 
-                for edge in 0..self.weights[layer-1][neuron-1].len(){
-                    self.weights[layer-1][neuron-1][edge] -= LEARNING_RATE *
-                        error * diff * activate_value * self.layers[layer-1][edge+1];
+                for edge in 1..self.weights[layer-1][neuron].len(){
+                    self.weights[layer-1][neuron][edge] -= LEARNING_RATE *
+                        error * diff * activate_value * self.layers[layer-1][edge-1];
                 }
             }
         }
     }
 
-    fn mean_square_error(&self, output: &Vec<f64>) -> f64{
+    fn mean_squared_error(&self, output: &Vec<f64>) -> f64{
         let mut accuracy = 0.0;
 
         for output_neuron in 1..self.layers[self.layers.len()-1].len(){
@@ -225,7 +219,7 @@ impl Network{
                 self.step_forward(&data.inputs[vector]);
 
                 // calculate mean square error for this vector
-                accuracy += self.mean_square_error(&data.outputs[vector]);
+                accuracy += self.mean_squared_error(&data.outputs[vector]);
 
                 self.step_backward(&data.outputs[vector]);
             }
@@ -248,18 +242,17 @@ impl Network{
             );
         }
 
-        for _ in 0..epoch_count{
-            println!("{:?}", self.weights[0][0]);
-            let mut threads = Vec::new();
-            let new_weights: Arc<Mutex<Vec<Vec<Vec<Vec<f64>>>>>> =
-                Arc::new(Mutex::new(vec![Vec::new(); THREAD_COUNT as usize]));
+        let mut threads = Vec::new();
+        let new_weights: Arc<Mutex<Vec<Vec<Vec<Vec<f64>>>>>> =
+            Arc::new(Mutex::new(vec![Vec::new(); THREAD_COUNT as usize]));
 
-            // constant count of threads(need to change)
-            for i in 0..THREAD_COUNT {
-                let data = Arc::clone(&data);
-                let mut network = self.clone();
-                let new_weights = Arc::clone(&new_weights);
-                let thread = thread::spawn(move || {
+        // constant count of threads(need to change)
+        for i in 0..THREAD_COUNT {
+            let data = Arc::clone(&data);
+            let mut network = self.clone();
+            let new_weights = Arc::clone(&new_weights);
+            let thread = thread::spawn(move || {
+                for _ in 0..epoch_count {
                     for j in 0..(data.count / THREAD_COUNT) {
                         network.step_forward(
                             &data.inputs[(j + i * data.count / THREAD_COUNT) as usize]
@@ -268,31 +261,30 @@ impl Network{
                             &data.outputs[(j + i * data.count / THREAD_COUNT) as usize]
                         );
                     }
+                }
 
-                    let mut new_weights = new_weights.lock().unwrap();
-                    new_weights[i as usize] = network.get_weights()
-                });
+                let mut new_weights = new_weights.lock().unwrap();
+                new_weights[i as usize] = network.get_weights()
+            });
+            threads.push(thread);
+        }
 
-                threads.push(thread);
-            }
+        for thread in threads {
+            thread.join().unwrap();
+        }
 
-            for thread in threads {
-                thread.join().unwrap();
-            }
+        let new_weights = new_weights.lock().unwrap();
 
-            let new_weights = new_weights.lock().unwrap();
+        for layer in 0..self.weights.len() {
+            for neuron in 0..self.weights[layer].len() {
+                for weight in 0..self.weights[layer][neuron].len() {
+                    let mut sum = 0.0;
 
-            for layer in 0..self.weights.len() {
-                for neuron in 0..self.weights[layer].len() {
-                    for weight in 0..self.weights[layer][neuron].len() {
-                        let mut sum = 0.0;
-
-                        for i in 0..THREAD_COUNT {
-                            sum += new_weights[i as usize][layer][neuron][weight];
-                        }
-
-                        self.weights[layer][neuron][weight] = sum / THREAD_COUNT as f64;
+                    for i in 0..THREAD_COUNT {
+                        sum += new_weights[i as usize][layer][neuron][weight];
                     }
+
+                    self.weights[layer][neuron][weight] = sum / THREAD_COUNT as f64;
                 }
             }
         }
@@ -346,6 +338,13 @@ impl Network{
     fn get_weights(self) -> Vec<Vec<Vec<f64>>>{
         self.weights
     }
+
+    // debug
+    fn print_values(&self){
+        for i in 1..self.layers.len(){
+            println!("{:?}", self.layers[i]);
+        }
+    }
 }
 
 // the sigmoid function: 1 / (1 + e^(-x)),
@@ -355,12 +354,19 @@ pub fn sigmoid(x: f64) -> f64{
     1.0 / (1.0 + E.powf(-x))
 }
 
+// ReLu function:
+// x < 0 => x * k
+// x >= 0 => x
 pub fn ReLu(x: f64) -> f64{
+    let k;
+
     if x < 0.0{
-        x * RELU_KOEFF
+        k = RELU_KOEFF;
     } else {
-        x
+        k = 1.0;
     }
+
+    x * k
 }
 
 pub fn ReLu_diff(x: f64) -> f64{

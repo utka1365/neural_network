@@ -23,7 +23,7 @@ fn main() -> Result<(), std::io::Error>{
     // let mut network2 = network1.clone();
 
     let start1 = Instant::now();
-    network1 = network1.multithread_back_propagation(train_data.clone(), 10)?;
+    network1 = network1.multithread_back_propagation(train_data.clone(), 5)?;
     let duration1 = start1.elapsed();
     /*
     let start2 = Instant::now();
