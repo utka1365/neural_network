@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::Read;
 
 // load images from MNIST dataset
 pub fn mnist_input(path: String) -> Result<Vec<Vec<f64>>, std::io::Error>{
