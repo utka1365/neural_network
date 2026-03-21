@@ -25,12 +25,12 @@ fn main() -> Result<(), std::io::Error>{
     let test_data = Arc::new(DataSet::new(test_inputs, test_outputs)?); 
     // don't touch
     
-    let mut network = Network::new(vec![784, 5, 10])?;
+    let mut network = AdaptiveNetwork::new(vec![784, 5, 10])?;
     let start = Instant::now();
+    test(&mut network, &test_data)?;
     network = multithread_back_propagation(network, train_data.clone(), 10)?;
-    // network moved here
-    test(network, &test_data)?;
-    print!("{:?}", start.elapsed());
+    test(&mut network, &test_data)?;
+    println!("{:?}", start.elapsed());
 
     Ok(())
 }

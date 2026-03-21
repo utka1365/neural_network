@@ -4,9 +4,10 @@ use std::{
     sync::{Arc, Mutex},
     thread
 };
-pub const LEARNING_RATE: f64 = 0.001;
-pub const RELU_KOEFF: f64 = 0.1;
+pub const LEARNING_RATE: f64 = 0.002;
+pub const RELU_KOEFF: f64 = 0.01;
 
+// this trait is needed for same work with different types of the networks
 pub trait Trainee{
     fn step_forward(&mut self, input: &Vec<f64>);
     fn step_backward(&mut self, output: &Vec<f64>);
@@ -61,7 +62,7 @@ impl DataSet{
 
 pub fn validate_dataset(network: &impl Trainee, data: &DataSet) -> bool {
     // dataset inputs and outputs must have correct length
-    if network.get_layers().len() != data.inputs[0].len() ||
+    if network.get_layers()[0].len() != data.inputs[0].len() ||
         network.get_layers()[network.get_layers().len() - 1].len() != data.outputs[0].len(){
         return false;
     }
@@ -105,14 +106,14 @@ pub fn multithread_back_propagation<T: Clone + Trainee + Send + 'static>(
         let thread = thread::spawn(move || {
             for _ in 0..epoch_count {
                 for j in 0..(data.count / thread_count) {
-                    //network.print_values();
+                    //println!("{:?}", copy.get_layers()[copy.get_layers().len()-1]);
                     copy.step_forward(
                         &data.inputs[(j + i * data.count / thread_count) as usize]
                     );
                     copy.step_backward(
                         &data.outputs[(j + i * data.count / thread_count) as usize]
                     );
-                    //network.print_values();
+                    //println!("{:?}", copy.get_layers()[copy.get_layers().len()-1]);
                 }
             }
 
@@ -147,46 +148,33 @@ pub fn multithread_back_propagation<T: Clone + Trainee + Send + 'static>(
 }
 
 // this function tests network on a test set and returns the accuracy
-pub fn test(mut network: impl Trainee, data: &DataSet) -> Result<impl Trainee, Error>{
-    if !validate_dataset(&network, &data){
+pub fn test(network: &mut impl Trainee, data: &DataSet) -> Result<(), Error>{
+    if !validate_dataset(network, &data){
         return Err(
             Error::new(ErrorKind::Other, "dataset is invalid".to_string()
             )
         );
     }
-
-    let mut cnt_right_predictions = 0;
     let mut accuracy = 0.0;
     let cnt_layers = network.get_layers().len();
 
     for vector in 0..data.count as usize{
         network.step_forward(&data.inputs[vector]);
-        let mut layers = network.get_mut_layers();
-
-        // Is prediction right?
-        let mut max: usize = 0;
+        let layers = network.get_mut_layers();
+        println!("{:?}", layers[layers.len()-1]);
+        println!("{:?}", data.outputs[vector]);
         for output_neuron in 0..layers[cnt_layers-1].len(){
-            if layers[cnt_layers-1][output_neuron] > layers[cnt_layers-1][max]{
-                max = output_neuron;
-            }
             // (Yi - Di) ^ 2
             accuracy +=
-                (
-                    layers[cnt_layers-1][output_neuron] -
-                        data.outputs[vector][output_neuron]
-                ).powi(2);
-        }
-
-        if data.outputs[vector][max] == 1.0{
-            cnt_right_predictions += 1;
+                (layers[cnt_layers-1][output_neuron] - data.outputs[vector][output_neuron])
+                    .powi(2);
         }
     }
-
+    //println!("{:?}", network.get_mut_weights());
     accuracy /= 100000.0;
     println!("{accuracy}");
-    println!("{}", cnt_right_predictions as f64 / 60000.0);
 
-    Ok(network)
+    Ok(())
 }
 
 // the sigmoid function: 1 / (1 + e^(-x)),
@@ -205,15 +193,11 @@ pub fn sigmoid_diff(x: f64) -> f64{
 // x < 0 => x * k
 // x >= 0 => x
 pub fn ReLU(x: f64) -> f64{
-    let k;
-
     if x < 0.0{
-        k = RELU_KOEFF;
+        RELU_KOEFF * x
     } else {
-        k = 1.0;
+        x
     }
-
-    x * k
 }
 
 pub fn ReLU_diff(x: f64) -> f64{
