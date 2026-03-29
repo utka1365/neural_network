@@ -89,7 +89,7 @@ impl Trainee for Network{
                         self.weights[layer-1][neuron][prev_neuron+1];
                 }
                 // calculate sigmoid function
-                self.layers[layer][neuron] = ReLU(sum);
+                self.layers[layer][neuron] = sigmoid(sum);
             }
         }
     }
@@ -100,7 +100,7 @@ impl Trainee for Network{
         // backpropagation for the output layer
         for neuron in 0..self.layers[cnt_layers-1].len(){
             let activate_value = self.layers[cnt_layers-1][neuron];
-            let diff = ReLU_diff(activate_value);
+            let diff = sigmoid_diff(activate_value);
             let error = (self.layers[cnt_layers-1][neuron] - output[neuron]) * diff;
             self.layers[cnt_layers-1][neuron] = error;
             // changing the bias
@@ -117,7 +117,7 @@ impl Trainee for Network{
         for layer in (1..(cnt_layers - 1)).rev(){
             for neuron in 0..self.layers[layer].len(){
                 let activate_value = self.layers[layer][neuron];
-                let diff = ReLU_diff(activate_value);
+                let diff = sigmoid_diff(activate_value);
                 let mut error = 0.0;
 
                 for next_neuron in 0..self.layers[layer+1].len(){

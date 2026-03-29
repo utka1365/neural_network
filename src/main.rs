@@ -25,11 +25,17 @@ fn main() -> Result<(), std::io::Error>{
     let test_data = Arc::new(DataSet::new(test_inputs, test_outputs)?); 
     // don't touch
     
-    let mut network = AdaptiveNetwork::new(vec![784, 5, 10])?;
+    let mut network = AdaptiveNetwork::new(vec![784, 512, 10])?;
+    //let mut network1 = Network::new(vec![784, 128, 10])?;
+    let mut i = 1;
     let start = Instant::now();
-    test(&mut network, &test_data)?;
-    network = multithread_back_propagation(network, train_data.clone(), 10)?;
-    test(&mut network, &test_data)?;
+    while test(&mut network, &test_data)? > 0.01 {
+        network = back_propagation(network, train_data.as_ref(), 1)?;
+        println!("{i}");
+        i += 1;
+    }
+    //network1 = back_propagation(network1, train_data.as_ref(), 30)?;
+    //test(&mut network1, &test_data)?;
     println!("{:?}", start.elapsed());
 
     Ok(())

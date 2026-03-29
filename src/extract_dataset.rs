@@ -33,9 +33,13 @@ pub fn mnist_output(path: String) -> Result<Vec<Vec<f64>>, std::io::Error>{
     file.read_to_end(&mut buffer)?;
 
     for i in 8..buffer.len(){
-        outputs.push(vec![0.00001; 10]);
-        outputs[i-8][buffer[i] as usize] = 0.99999;
+        outputs.push(vec![0.0; 10]);
+        outputs[i-8][buffer[i] as usize] = 1.0;
     }
 
     Ok(outputs)
 }
+/*
+pub fn xor_dataset(path: String) -> Result<(Vec<Vec<f64>>, Vec<Vec<f64>>), std::io::Error>{
+
+}*/
