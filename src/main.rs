@@ -1,12 +1,14 @@
 mod base;
 mod adaptive;
 mod classic;
+mod hybrid;
 mod extract_dataset;
 
 use std::{sync::Arc, time::Instant};
 use base::*;
 use adaptive::*;
 use classic::*;
+use hybrid::*;
 use extract_dataset::*;
 
 fn main() -> Result<(), std::io::Error>{
@@ -24,19 +26,14 @@ fn main() -> Result<(), std::io::Error>{
     let train_data = Arc::new(DataSet::new(train_inputs, train_outputs)?);
     let test_data = Arc::new(DataSet::new(test_inputs, test_outputs)?); 
     // don't touch
-    
-    let mut network = AdaptiveNetwork::new(vec![784, 512, 10])?;
-    //let mut network1 = Network::new(vec![784, 128, 10])?;
+
+    let mut network = Network::new(vec![784, 128, 10])?;
     let mut i = 1;
-    let start = Instant::now();
-    while test(&mut network, &test_data)? > 0.01 {
-        network = back_propagation(network, train_data.as_ref(), 1)?;
-        println!("{i}");
+    loop {
+        println!("{i} эпоха:");
+        network = mini_batch_back_propagation(network, train_data.as_ref(), 1, 128)?;
+        test(&mut network, &test_data)?;
         i += 1;
     }
-    //network1 = back_propagation(network1, train_data.as_ref(), 30)?;
-    //test(&mut network1, &test_data)?;
-    println!("{:?}", start.elapsed());
-
     Ok(())
 }

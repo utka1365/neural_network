@@ -4,6 +4,9 @@ use std::{
 use rand::random_range;
 use crate::base::*;
 
+const LAMBDA: f64 = 0.1;
+const LEARNING_RATE: f64 = 0.001;
+
 #[derive(Clone)]
 pub struct Network{
     // array of layers
@@ -104,12 +107,14 @@ impl Trainee for Network{
             let error = (self.layers[cnt_layers-1][neuron] - output[neuron]) * diff;
             self.layers[cnt_layers-1][neuron] = error;
             // changing the bias
-            self.weights[cnt_layers-2][neuron][0] -= LEARNING_RATE * error;
+            self.weights[cnt_layers-2][neuron][0] += LEARNING_RATE *
+                (error + 2.0 * LAMBDA * self.weights[cnt_layers-2][neuron][0]);
 
             // changing the weights of other edges
             for edge in 1..self.weights[cnt_layers-2][neuron].len(){
                 self.weights[cnt_layers-2][neuron][edge] -= LEARNING_RATE *
-                    error * self.layers[cnt_layers-2][edge-1];
+                    (error + 2.0 * LAMBDA * self.weights[cnt_layers-2][neuron][edge]) *
+                    self.layers[cnt_layers-2][edge-1];
             }
         }
 
@@ -127,11 +132,60 @@ impl Trainee for Network{
 
                 error *= diff;
                 self.layers[layer][neuron] = error;
-                self.weights[layer-1][neuron][0] -= LEARNING_RATE * error;
+                self.weights[layer-1][neuron][0] -= LEARNING_RATE *
+                    (error + 2.0 * LAMBDA * self.weights[layer-1][neuron][0]);
 
                 for edge in 1..self.weights[layer-1][neuron].len(){
                     self.weights[layer-1][neuron][edge] -= LEARNING_RATE *
-                        error * self.layers[layer-1][edge-1];
+                        (error + 2.0 * LAMBDA * self.weights[layer-1][neuron][edge]) *
+                        self.layers[layer-1][edge-1];
+                }
+            }
+        }
+    }
+
+    fn mini_batch_step_backward(&mut self, gradients: &mut Vec<Vec<Vec<f64>>>, output: &Vec<f64>) {
+        let cnt_layers = self.layers.len();
+
+        // backpropagation for the output layer
+        for neuron in 0..self.layers[cnt_layers-1].len(){
+            let activate_value = self.layers[cnt_layers-1][neuron];
+            let diff = sigmoid_diff(activate_value);
+            let error = (self.layers[cnt_layers-1][neuron] - output[neuron]) * diff;
+            self.layers[cnt_layers-1][neuron] = error;
+            // changing the bias
+            gradients[cnt_layers-2][neuron][0] += LEARNING_RATE *
+                (error + 2.0 * LAMBDA * self.weights[cnt_layers-2][neuron][0]);
+
+            // changing the weights of other edges
+            for edge in 1..self.weights[cnt_layers-2][neuron].len(){
+                gradients[cnt_layers-2][neuron][edge] -= LEARNING_RATE *
+                    (error * 2.0 * LAMBDA * self.weights[cnt_layers-2][neuron][edge]) *
+                    self.layers[cnt_layers-2][edge-1];
+            }
+        }
+
+        // backpropagation for other layers
+        for layer in (1..(cnt_layers - 1)).rev(){
+            for neuron in 0..self.layers[layer].len(){
+                let activate_value = self.layers[layer][neuron];
+                let diff = sigmoid_diff(activate_value);
+                let mut error = 0.0;
+
+                for next_neuron in 0..self.layers[layer+1].len(){
+                    error += self.layers[layer+1][next_neuron] *
+                        self.weights[layer][next_neuron][neuron+1];
+                }
+
+                error *= diff;
+                self.layers[layer][neuron] = error;
+                gradients[layer-1][neuron][0] += LEARNING_RATE *
+                    (error + 2.0 * LAMBDA * self.weights[layer-1][neuron][0]);
+
+                for edge in 1..self.weights[layer-1][neuron].len(){
+                    gradients[layer-1][neuron][edge] -= LEARNING_RATE *
+                        (error + 2.0 * LAMBDA * self.weights[layer-1][neuron][edge]) *
+                        self.layers[layer-1][edge-1];
                 }
             }
         }
@@ -148,7 +202,7 @@ impl Trainee for Network{
     fn borrow_weights(self) -> Vec<Vec<Vec<f64>>>{
         self.weights
     }
-    
+
     fn get_mut_weights(&mut self) -> &mut Vec<Vec<Vec<f64>>>{
         &mut self.weights
     }

@@ -6,9 +6,11 @@ use crate::base::*;
 
 const LN_VALUE: f64 = 6.90675;
 const KOEFF: f64 = 1.0;
+const LAMBDA: f64 = 0.5;
+pub const LEARNING_RATE: f64 = 1.0;
 
 #[derive(Clone)]
-pub struct AdaptiveNetwork{
+pub struct HybridNetwork{
     layers: Vec<Vec<f64>>,
     weights: Vec<Vec<Vec<f64>>>,
     // deltas of every neuron
@@ -17,7 +19,7 @@ pub struct AdaptiveNetwork{
     sums: Vec<Vec<f64>>
 }
 
-impl AdaptiveNetwork{
+impl HybridNetwork{
     pub fn new(cnt_neurons: Vec<i32>) -> Result<Self, Error>{
         let cnt_layers = cnt_neurons.len();
 
@@ -74,7 +76,7 @@ impl AdaptiveNetwork{
     }
 }
 
-impl Trainee for AdaptiveNetwork{
+impl Trainee for HybridNetwork{
     fn step_forward(&mut self, input: &Vec<f64>){
         // initialize input layer of network
         for i in 0..self.layers[0].len() {
@@ -112,69 +114,56 @@ impl Trainee for AdaptiveNetwork{
         }
     }
 
-    fn step_backward(&mut self, output: &Vec<f64>){
+    fn step_backward(&mut self, output: &Vec<f64>) {
         let cnt_layers = self.layers.len();
         // backpropagation for the output layer
         let mut denom = 1.0;
 
-        for prev_neuron in 0..self.layers[cnt_layers-2].len(){
-            denom += self.layers[cnt_layers-2][prev_neuron].powi(2);
+        for prev_neuron in 0..self.layers[cnt_layers - 2].len() {
+            denom += self.layers[cnt_layers - 2][prev_neuron].powi(2);
         }
 
-        for neuron in 0..self.layers[cnt_layers-1].len(){
-            let error = self.layers[cnt_layers-1][neuron] - output[neuron];
+        for neuron in 0..self.layers[cnt_layers - 1].len() {
+            let error = self.layers[cnt_layers - 1][neuron] - output[neuron];
             let delta: f64;
-            self.deltas[cnt_layers-1][neuron] = error;
+            self.deltas[cnt_layers - 1][neuron] = error;
 
-            if output[neuron] == 1.0{
-                delta = (self.sums[cnt_layers-1][neuron] - LN_VALUE) / denom;
+            if output[neuron] == 1.0 {
+                delta = (self.sums[cnt_layers - 1][neuron] - LN_VALUE) / denom;
             } else {
-                delta = (self.sums[cnt_layers-1][neuron] + LN_VALUE) / denom;
+                delta = (self.sums[cnt_layers - 1][neuron] + LN_VALUE) / denom;
             }
             // changing the bias
-            self.weights[cnt_layers-2][neuron][0] += KOEFF * delta;
+            self.weights[cnt_layers - 2][neuron][0] += KOEFF * delta;
 
             // changing the weights of other edges
-            for edge in 1..self.weights[cnt_layers-2][neuron].len(){
-                self.weights[cnt_layers-2][neuron][edge] -=
-                    KOEFF * delta * self.layers[cnt_layers-2][edge-1];
+            for edge in 1..self.weights[cnt_layers - 2][neuron].len() {
+                self.weights[cnt_layers - 2][neuron][edge] -=
+                    KOEFF * delta * self.layers[cnt_layers - 2][edge - 1];
             }
         }
 
         // backpropagation for other layers
-        for layer in (1..(cnt_layers - 1)).rev(){
-            denom = 1.0;
-
-            for prev_neuron in 0..self.layers[layer-1].len(){
-                denom += self.layers[layer-1][prev_neuron].powi(2);
-            }
-
-            for neuron in 0..self.layers[layer].len(){
+        for layer in (1..(cnt_layers - 1)).rev() {
+            for neuron in 0..self.layers[layer].len() {
                 let activate_value = self.layers[layer][neuron];
+                let diff = sigmoid_diff(activate_value);
                 let mut error = 0.0;
 
-                for next_neuron in 0..self.layers[layer+1].len(){
-                    error += self.deltas[layer+1][next_neuron] *
-                        sigmoid_diff(self.layers[layer+1][next_neuron]) *
-                        self.weights[layer][next_neuron][neuron+1];
+                for next_neuron in 0..self.layers[layer + 1].len() {
+                    error += self.deltas[layer + 1][next_neuron] *
+                        self.weights[layer][next_neuron][neuron + 1];
                 }
 
+                error *= diff;
                 self.deltas[layer][neuron] = error;
-                let delta: f64;
-                if activate_value - error >= 0.999{
-                    delta = (self.sums[layer][neuron] - LN_VALUE) / denom;
-                } else if activate_value - error <= 0.001{
-                    delta = (self.sums[layer][neuron] + LN_VALUE) / denom;
-                } else {
-                    delta = (self.sums[layer][neuron] -
-                        ((activate_value - error) / (1.0 - activate_value + error)).ln()) / denom;
-                }
+                self.weights[layer - 1][neuron][0] -= LEARNING_RATE *
+                    (error + 2.0 * LAMBDA * self.weights[layer - 1][neuron][0]);
 
-                self.weights[layer-1][neuron][0] += KOEFF * delta;
-
-                for edge in 1..self.weights[layer-1][neuron].len(){
-                    self.weights[layer-1][neuron][edge] -=
-                        KOEFF * delta * self.layers[layer-1][edge-1];
+                for edge in 1..self.weights[layer - 1][neuron].len() {
+                    self.weights[layer - 1][neuron][edge] -= LEARNING_RATE *
+                        (error + 2.0 * LAMBDA * self.weights[layer - 1][neuron][edge]) *
+                        self.layers[layer - 1][edge - 1];
                 }
             }
         }
@@ -209,38 +198,23 @@ impl Trainee for AdaptiveNetwork{
         }
 
         for layer in (1..(cnt_layers - 1)).rev(){
-            denom = 1.0;
-
-            for prev_neuron in 0..self.layers[layer-1].len(){
-                denom += self.layers[layer-1][prev_neuron].powi(2);
-            }
-
             for neuron in 0..self.layers[layer].len(){
                 let activate_value = self.layers[layer][neuron];
+                let diff = sigmoid_diff(activate_value);
                 let mut error = 0.0;
 
                 for next_neuron in 0..self.layers[layer+1].len(){
                     error += self.deltas[layer+1][next_neuron] *
-                        sigmoid_diff(self.layers[layer+1][next_neuron]) *
                         self.weights[layer][next_neuron][neuron+1];
                 }
 
+                error *= diff;
                 self.deltas[layer][neuron] = error;
-                let delta: f64;
-                if activate_value - error >= 0.999{
-                    delta = (self.sums[layer][neuron] - LN_VALUE) / denom;
-                } else if activate_value - error <= 0.001{
-                    delta = (self.sums[layer][neuron] + LN_VALUE) / denom;
-                } else {
-                    delta = (self.sums[layer][neuron] -
-                        ((activate_value - error) / (1.0 - activate_value + error)).ln()) / denom;
-                }
-
-                gradients[layer-1][neuron][0] += KOEFF * delta;
+                gradients[layer-1][neuron][0] += LEARNING_RATE * error;
 
                 for edge in 1..self.weights[layer-1][neuron].len(){
-                    gradients[layer-1][neuron][edge] -=
-                        KOEFF * delta * self.layers[layer-1][edge-1];
+                    gradients[layer-1][neuron][edge] -= LEARNING_RATE *
+                        error * self.layers[layer-1][edge-1];
                 }
             }
         }
