@@ -2,10 +2,10 @@ use std::{
     io::{Error, ErrorKind},
 };
 use rand::random_range;
-use crate::base::*;
+use crate::only_std::base::*;
 
-const LAMBDA: f64 = 0.1;
-const LEARNING_RATE: f64 = 0.001;
+const LAMBDA: f64 = 0.01;
+const LEARNING_RATE: f64 = 0.01;
 
 #[derive(Clone)]
 pub struct Network{
@@ -68,6 +68,26 @@ impl Network{
         })
     }
 
+    pub fn pretrain_new(weights: Vec<Vec<Vec<f64>>>) -> Result<Self, Error>{
+        if weights.len() < 1 {
+            return Err(Error::new(
+                ErrorKind::Other, "Neural network must have at least two layers".to_string()
+            ));
+        }
+
+        let mut layers: Vec<Vec<f64>> = Vec::new();
+        layers.push(vec![0.0; weights[0][0].len() - 1]);
+
+        for i in 0..weights.len() {
+            layers.push(vec![0.0; weights[i].len()]);
+        }
+
+        Ok(Self{
+            layers,
+            weights
+        })
+    }
+
     // debug
     fn print_values(&self){
         println!("{:?}", self.layers[self.layers.len()-1]);
@@ -107,14 +127,12 @@ impl Trainee for Network{
             let error = (self.layers[cnt_layers-1][neuron] - output[neuron]) * diff;
             self.layers[cnt_layers-1][neuron] = error;
             // changing the bias
-            self.weights[cnt_layers-2][neuron][0] += LEARNING_RATE *
-                (error + 2.0 * LAMBDA * self.weights[cnt_layers-2][neuron][0]);
+            self.weights[cnt_layers-2][neuron][0] += LEARNING_RATE * error;
 
             // changing the weights of other edges
             for edge in 1..self.weights[cnt_layers-2][neuron].len(){
                 self.weights[cnt_layers-2][neuron][edge] -= LEARNING_RATE *
-                    (error + 2.0 * LAMBDA * self.weights[cnt_layers-2][neuron][edge]) *
-                    self.layers[cnt_layers-2][edge-1];
+                    error * self.layers[cnt_layers-2][edge-1];
             }
         }
 
@@ -132,12 +150,10 @@ impl Trainee for Network{
 
                 error *= diff;
                 self.layers[layer][neuron] = error;
-                self.weights[layer-1][neuron][0] -= LEARNING_RATE *
-                    (error + 2.0 * LAMBDA * self.weights[layer-1][neuron][0]);
+                self.weights[layer-1][neuron][0] -= LEARNING_RATE * error;
 
                 for edge in 1..self.weights[layer-1][neuron].len(){
-                    self.weights[layer-1][neuron][edge] -= LEARNING_RATE *
-                        (error + 2.0 * LAMBDA * self.weights[layer-1][neuron][edge]) *
+                    self.weights[layer-1][neuron][edge] -= LEARNING_RATE * error *
                         self.layers[layer-1][edge-1];
                 }
             }

@@ -386,8 +386,8 @@ pub fn test(network: &mut impl Trainee, data: &DataSet) -> Result<f64, Error>{
         let layers = network.get_layers();
         let mut max = 0;
         let mut label = 0;
-        println!("{:?}", layers[cnt_layers-1]);
-        println!("{:?}", data.outputs[vector]);
+        //println!("{:?}", layers[cnt_layers-1]);
+        //println!("{:?}", data.outputs[vector]);
         for output_neuron in 0..layers[cnt_layers-1].len(){
             if data.outputs[vector][output_neuron] == 1.0{
                 label = output_neuron;

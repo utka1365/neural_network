@@ -2,12 +2,12 @@ use std::{
     io::{Error, ErrorKind},
 };
 use rand::random_range;
-use crate::base::*;
+use crate::only_std::base::*;
 
 const LN_VALUE: f64 = 6.90675;
 const KOEFF: f64 = 1.0;
 const LAMBDA: f64 = 0.5;
-pub const LEARNING_RATE: f64 = 1.0;
+pub const LEARNING_RATE: f64 = 0.1;
 
 #[derive(Clone)]
 pub struct HybridNetwork{
@@ -157,13 +157,11 @@ impl Trainee for HybridNetwork{
 
                 error *= diff;
                 self.deltas[layer][neuron] = error;
-                self.weights[layer - 1][neuron][0] -= LEARNING_RATE *
-                    (error + 2.0 * LAMBDA * self.weights[layer - 1][neuron][0]);
+                self.weights[layer - 1][neuron][0] -= LEARNING_RATE * error;
 
                 for edge in 1..self.weights[layer - 1][neuron].len() {
                     self.weights[layer - 1][neuron][edge] -= LEARNING_RATE *
-                        (error + 2.0 * LAMBDA * self.weights[layer - 1][neuron][edge]) *
-                        self.layers[layer - 1][edge - 1];
+                        error * self.layers[layer - 1][edge - 1];
                 }
             }
         }

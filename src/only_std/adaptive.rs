@@ -2,7 +2,7 @@ use std::{
     io::{Error, ErrorKind},
 };
 use rand::random_range;
-use crate::base::*;
+use crate::only_std::base::*;
 
 const LN_VALUE: f64 = 6.90675;
 const KOEFF: f64 = 1.0;

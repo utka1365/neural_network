@@ -6,3 +6,5 @@ edition = "2024"
 [dependencies]
 rand = "0.10.0"
 csv = "1.4.0"
+ndarray = { version = "0.17.2", features = ["std", "rayon"] }
+ndarray-rand = "0.16.0"
