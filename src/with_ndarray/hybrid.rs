@@ -1,19 +1,26 @@
 use std::{
     io::{Error, ErrorKind},
 };
-use std::alloc::LayoutErr;
 use std::f64::consts::E;
 use ndarray::{Array1, Array2};
 use ndarray::parallel::prelude::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
+use rand::prelude::SliceRandom;
 use rand::random_range;
-use crate::only_std::base::RELU_KOEFF;
 
 pub const LEARNING_RATE: f64 = 0.01;
+pub const RELU_KOEFF: f64 = 0.01;
 pub const LN_VALUE: f64 = 6.90675;
 
+#[derive(Clone)]
 pub enum Activation {
     Sigmoid,
     ReLU
+}
+
+pub struct DataSet {
+    size: i32,
+    inputs: Vec<Array1<f64>>,
+    outputs: Vec<Array1<f64>>,
 }
 
 pub struct Layer {
@@ -57,7 +64,7 @@ impl Layer {
         );
     }
 
-    fn backward(&mut self, input: &Array1<f64>, output_layer: &Self) {
+    fn backward(&mut self, next_layer: &Self) -> Array1<f64> {
         self.gammas = Array1::from_vec(
             self
                 .output
@@ -70,29 +77,27 @@ impl Layer {
         );
 
         let deltas = LEARNING_RATE * &self.gammas *
-            &output_layer.gammas.dot(&output_layer.weights);
-        self.bias = &self.bias - &deltas;
-        self.weights = &self.weights - deltas * input.t();
+            &next_layer.gammas.dot(&next_layer.weights);
         self.gammas = &self.gammas * &self.output;
+
+        deltas
     }
 
-    fn output_backward(&mut self, input: &Array1<f64>, output: &Array1<f64>) {
+    fn output_backward(&mut self, input: &Array1<f64>, output: &Array1<f64>) -> Array1<f64> {
         let denom = 1.0 + input
             .into_par_iter()
             .map(|x| x.powi(2))
             .sum::<f64>();
         let deltas = (&self.sums - LN_VALUE) / denom;
         self.gammas = &self.output - output;
-        self.bias = &self.bias - &deltas;
-        self.weights = &self.weights - deltas * input.t();
         self.gammas = &self.gammas * &self.output;
+
+        deltas
     }
 }
 
 pub struct Network {
-    layers: Array1<Layer>,
-    input: Array1<f64>,
-    output: Array1<f64>,
+    layers: Vec<Layer>
 }
 
 impl Network {
@@ -106,21 +111,56 @@ impl Network {
             return Err(Error::new(ErrorKind::Other, "network must have at least two layers"));
         }
 
-        let input = Array1::<f64>::zeros(cnt_neurons[0] as usize);
-        let output =
-            Array1::<f64>::zeros(cnt_neurons[cnt_neurons.len()-1] as usize);
         let mut layers = Vec::new();
 
         for i in 0..cnt_neurons.len() - 1 {
-            layers.push(Layer::new(cnt_neurons[i+1], cnt_neurons[i], &activation_types[i])?);
+            layers.push(Layer::new(
+                cnt_neurons[i+1],
+                cnt_neurons[i],
+                activation_types[i].clone()
+
+            )?);
         }
 
-        let layers = Array1::from_vec(layers);
         Ok(Self{
-            layers,
-            input,
-            output
+            layers
         })
+    }
+
+    pub fn mini_batch(&mut self, data: &DataSet, epoch_count: i32, batch_size: usize) {
+        let mut rng = rand::rng();
+        let mut indices = (0..data.size as usize).collect::<Vec<usize>>();
+        let cnt_layers = self.layers.len();
+
+        for _ in 0..epoch_count {
+            indices.shuffle(&mut rng);
+
+            for batch in 0..data.size as usize / batch_size {
+                let mut deltas: Vec<Array1<f64>> = Vec::new();
+
+                for point in 0..batch_size as usize {
+                    self.layers[0].forward(&data.inputs[indices[batch * batch_size + point]]);
+
+                    for layer in 1..cnt_layers {
+                        let (left, right) = self.layers.split_at_mut(layer);
+                        right[0].forward(&left[layer-1].output);
+                    }
+
+                    let penultimate_layer = self.layers.get(cnt_layers-2).unwrap();
+                    deltas.push(
+                        self.layers[cnt_layers-1].output_backward(
+                            &penultimate_layer.output,
+                            &data.outputs[batch * batch_size + point]
+                        )
+                    );
+
+                    for layer in (0..cnt_layers - 1).rev() {
+                        let next_layer = self.layers.get(layer+1).unwrap();
+                        deltas.push(self.layers[layer].backward(next_layer));
+                    }
+                }
+            }
+        }
     }
 }
 
