@@ -127,7 +127,7 @@ impl Network {
         })
     }
 
-    pub fn mini_batch(&mut self, data: &DataSet, epoch_count: i32, batch_size: usize) {
+    pub fn train(mut self, data: &DataSet, epoch_count: i32, batch_size: usize) {
         let mut rng = rand::rng();
         let mut indices = (0..data.size as usize).collect::<Vec<usize>>();
         let cnt_layers = self.layers.len();
@@ -138,6 +138,10 @@ impl Network {
             for batch in 0..data.size as usize / batch_size {
                 let mut deltas: Vec<Array1<f64>> = Vec::new();
 
+                for layer in 0..cnt_layers {
+                    deltas.push(Array1::<f64>::zeros(self.layers[layer].output.len()));
+                }
+
                 for point in 0..batch_size as usize {
                     self.layers[0].forward(&data.inputs[indices[batch * batch_size + point]]);
 
@@ -146,17 +150,16 @@ impl Network {
                         right[0].forward(&left[layer-1].output);
                     }
 
-                    let penultimate_layer = self.layers.get(cnt_layers-2).unwrap();
-                    deltas.push(
-                        self.layers[cnt_layers-1].output_backward(
-                            &penultimate_layer.output,
+                    let penultimate_layer = self.layers[cnt_layers-2].output.clone();
+                    deltas[cnt_layers-1] = deltas[cnt_layers-1].clone() + self.layers[cnt_layers-1]
+                        .output_backward(
+                            &penultimate_layer,
                             &data.outputs[batch * batch_size + point]
-                        )
-                    );
+                        );
 
                     for layer in (0..cnt_layers - 1).rev() {
-                        let next_layer = self.layers.get(layer+1).unwrap();
-                        deltas.push(self.layers[layer].backward(next_layer));
+                        let (left, right) = self.layers.split_at_mut(layer+1);
+                        deltas[] left[layer].backward(&right[0]);
                     }
                 }
             }
