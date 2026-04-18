@@ -379,7 +379,6 @@ pub fn test(network: &mut impl Trainee, data: &DataSet) -> Result<f64, Error>{
     let mut accuracy = 0.0;
     let mut cnt = 0;
     let cnt_layers = network.get_layers().len();
-    let thread_count = thread::available_parallelism()?.get() as i32;
 
     for vector in 0..data.count as usize{
         network.step_forward(&data.inputs[vector]);

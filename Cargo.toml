@@ -3,6 +3,14 @@ name = "neural_network"
 version = "0.1.0"
 edition = "2024"
 
+# это от дипсика
+# настройка компиляции
+[profile.release]
+opt-level = 3
+lto = "fat"          # Link Time Optimization
+codegen-units = 1    # Лучшая оптимизация
+panic = "abort"      # Убирает паник-обработчики
+
 [dependencies]
 rand = "0.10.0"
 csv = "1.4.0"
