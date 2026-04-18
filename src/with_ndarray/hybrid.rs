@@ -7,7 +7,7 @@ use ndarray::parallel::prelude::{IntoParallelIterator, ParallelIterator};
 use rand::prelude::SliceRandom;
 use rand::random_range;
 
-pub const LEARNING_RATE: f32 = 1.;
+pub const LEARNING_RATE: f32 = 0.001;
 pub const RELU_KOEFF: f32 = 0.01;
 pub const LN_VALUE: f32 = 6.90675;
 pub const LAMBDA: f32 = 0.0001;
@@ -107,7 +107,7 @@ impl Layer {
         )
     }
 
-    fn output_backward(
+    fn adaptive_output_backward(
         &mut self, input: &Array1<f32>, labels: &Array1<f32>
     ) -> (Array2<f32>, Array1<f32>) {
         let denom = 1.0 + input
@@ -130,6 +130,21 @@ impl Layer {
             Activation::Sigmoid => sigmoid_diff(*activate_value),
             Activation::ReLU => ReLU_diff(*activate_value)
         });
+
+        (
+            deltas.to_owned().insert_axis(Axis(1)) * input.to_owned().insert_axis(Axis(0)),
+            deltas
+        )
+    }
+
+    fn classic_output_backward(
+        &mut self, input: &Array1<f32>, labels: &Array1<f32>
+    ) -> (Array2<f32>, Array1<f32>) {
+        self.deltas = (&self.output - labels) * self.output.mapv(|x| match self.activation {
+            Activation::Sigmoid => sigmoid_diff(x),
+            Activation::ReLU => ReLU_diff(x)
+        });
+        let deltas = self.deltas.clone();
 
         (
             deltas.to_owned().insert_axis(Axis(1)) * input.to_owned().insert_axis(Axis(0)),
@@ -200,10 +215,11 @@ impl Network {
                     {
                         let (left, right) =
                             self.layers.split_at_mut(cnt_layers - 1);
-                        let (weights, bias) = right[0].output_backward(
-                            &left[cnt_layers-2].output,
-                            &data.outputs[batch[point]],
-                        );
+                        let (weights, bias) = right[0]
+                            .adaptive_output_backward(
+                                &left[cnt_layers-2].output,
+                                &data.outputs[batch[point]],
+                            );
                         weights_gradients[cnt_layers-1] += &weights;
                         biases_gradients[cnt_layers-1] += &bias;
                     }
@@ -294,10 +310,11 @@ impl Network {
                     {
                         let (left, right) =
                             self.layers.split_at_mut(cnt_layers - 1);
-                        let (weights, bias) = right[0].output_backward(
-                            &left[cnt_layers-2].output,
-                            &data.outputs[batch[point]],
-                        );
+                        let (weights, bias) = right[0]
+                            .adaptive_output_backward(
+                                &left[cnt_layers-2].output,
+                                &data.outputs[batch[point]]
+                            );
                         weights_gradients[cnt_layers-1] += &weights;
                         biases_gradients[cnt_layers-1] += &bias;
                     }
@@ -305,7 +322,8 @@ impl Network {
                     for layer in (1..cnt_layers - 1).rev() {
                         let (left, right) =
                             self.layers.split_at_mut(layer+1);
-                        let (left, mid) = left.split_at_mut(layer);
+                        let (left, mid) =
+                            left.split_at_mut(layer);
                         let (weights, bias) = mid[0].backward(
                             &left[layer-1].output,
                             &right[0]
@@ -365,8 +383,10 @@ impl Network {
                         let correct_m = m / (1.0 - BETA1.powi(t));
                         let correct_bias_m = bias_m / (1.0 - BETA1.powi(t));
                         let correct_v = (v / (1.0 - BETA2.powi(t))).sqrt() + EPSILON;
-                        let correct_bias_v = (bias_v / (1.0 - BETA2.powi(t))).sqrt() + EPSILON;
-                        layer.weights -= &(learning_rate_scaled * (correct_m / correct_v) + lambda_scaled * &layer.weights);
+                        let correct_bias_v =
+                            (bias_v / (1.0 - BETA2.powi(t))).sqrt() + EPSILON;
+                        layer.weights -= &(learning_rate_scaled * ((correct_m / correct_v) +
+                            lambda_scaled * &layer.weights));
                         layer.bias -= &(learning_rate_scaled * correct_bias_m / correct_bias_v);
                     });
                 Zip::from(&mut weights_gradients)
@@ -388,7 +408,8 @@ impl Network {
             self.layers[0].forward(&data.inputs[vector]);
 
             for layer in 1..cnt_layers {
-                let (left, right) = self.layers.split_at_mut(layer);
+                let (left, right) =
+                    self.layers.split_at_mut(layer);
                 right[0].forward(&left[layer-1].output);
             }
             
